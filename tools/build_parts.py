@@ -170,7 +170,7 @@ def fill_gaps(mask, dt, circles, budget, min_r, target=0.97):
     return circles
 
 
-def build(i, grid, min_fill, max_parts, pad=1.0):
+def build(i, grid, min_fill, max_parts, pad=1.0, circle=False):
     path = find_sprite(i)
     im = Image.open(path).convert("RGBA")
     alpha = np.asarray(im)[:, :, 3]
@@ -178,6 +178,27 @@ def build(i, grid, min_fill, max_parts, pad=1.0):
 
     dt = euclid_dt(mask)
     circles = []
+
+    # --circle：一个居中大圆直接覆盖整个轮廓。
+    # 圆心取画布中心、半径取主体最远点距离，覆盖率恒为 100%，rb 却比「吹胖的小圆」小得多。
+    if circle:
+        ys, xs = np.nonzero(mask)
+        cx = CANVAS / 2.0
+        cy = CANVAS / 2.0
+        rad = float(np.sqrt(((xs - cx) ** 2 + (ys - cy) ** 2).max()))
+        circles = [(cx, cy, rad, rad * rad)]
+        cover = circles_mask(circles, mask.shape)
+        inter = (cover & mask).sum()
+        union = (cover | mask).sum()
+        return {
+            "parts": [[0.0, 0.0, round(rad / SCALE, 3)]],
+            "rb": round(rad / SCALE, 3),
+            "iou": inter / union if union else 0.0,
+            "recall": inter / mask.sum() if mask.sum() else 0.0,
+            "bulge": (cover & ~mask).sum() / cover.sum() if cover.sum() else 0.0,
+            "count": 1,
+        }
+
     if grid > 0:
         circles = grid_circles(mask, grid, min_fill, dt)
         if len(circles) > max_parts:
@@ -222,17 +243,22 @@ def main():
     ap.add_argument("--grid", type=int, default=5)
     ap.add_argument("--min-fill", type=float, default=0.30)
     ap.add_argument("--max-parts", type=int, default=9)
+    ap.add_argument("--circle", action="store_true",
+                    help="用单个居中大圆代替小圆拼接（覆盖率 100%，rb 更小）")
     ap.add_argument("--pad", type=float, default=1.0,
                     help="碰撞圆外扩系数：1.0=内接（旧行为），>1 让碰撞箱贴合视觉轮廓")
     ap.add_argument("--preview", action="store_true", help="导出贴合度对照图 _parts_preview.png")
     args = ap.parse_args()
 
     data = []
-    print("网格 %dx%d  最小填充 %.2f  最多 %d 个圆  外扩 %.2f\n"
-          % (args.grid, args.grid, args.min_fill, args.max_parts, args.pad))
+    if args.circle:
+        print("模式：单个居中大圆（覆盖率 100%）\n")
+    else:
+        print("网格 %dx%d  最小填充 %.2f  最多 %d 个圆  外扩 %.2f\n"
+              % (args.grid, args.grid, args.min_fill, args.max_parts, args.pad))
     print("%-4s %-11s %5s %7s %7s %7s   %s" % ("tier", "name", "circles", "IoU", "覆盖率", "超出率", "rb"))
     for i in range(1, 12):
-        r = build(i, args.grid, args.min_fill, args.max_parts, args.pad)
+        r = build(i, args.grid, args.min_fill, args.max_parts, args.pad, args.circle)
         data.append({"parts": r["parts"], "rb": r["rb"]})
         print("%-4d %-11s %5d %7.3f %6.1f%% %6.1f%%   %.3f"
               % (i - 1, TIERS[i - 1], r["count"], r["iou"], r["recall"] * 100,
