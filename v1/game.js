@@ -41,9 +41,6 @@
   const WALL_RESTITUTION = 0.45;  // 撞墙 / 撞地面的弹性
   const REST_THRESHOLD   = 55;    // 撞击速度低于此值不反弹（保证堆叠稳、不抖）
   const FRICTION         = 0.955; // 接触时的切向摩擦（每个子步）
-  const CONTACT_DAMP     = 0.82;  // 接触且有支撑时的速度衰减（真正让堆叠停下来的那个）
-  const SETTLE_SPEED     = 45;    // 低于这个速度直接归零，彻底断掉堆叠抖动
-  const SETTLE_SPEED2    = SETTLE_SPEED * SETTLE_SPEED;
   const SQUASH_DECAY     = 9;     // 挤压回弹速度
   const SQUASH_MAX       = 0.30;  // 最大挤压变形
 
@@ -456,17 +453,6 @@
       let vy = dy * invDt;
 
       if (b.contacts > 0) vx *= FRICTION;   // 接触时的切向摩擦
-
-      /* 静止阻尼：只在「有支撑」时生效，把堆叠的残余微动吃掉。
-         PBD 的位置分离会让叠起来的水果互相推挤，光靠位置约束永远停不下来 ——
-         堆顶一直在抖，判负规则要求的「静止累计 1.5 秒」就永远凑不够，于是输不了。
-         速度很小时直接归零（SETTLE_SPEED），彻底断掉抖动。 */
-      if (b.contacts > 0 && b.landed) {
-        vx *= CONTACT_DAMP;
-        vy *= CONTACT_DAMP;
-        const sp2 = vx * vx + vy * vy;
-        if (sp2 < SETTLE_SPEED2) { vx = 0; vy = 0; }
-      }
 
       if (b.sq > 0) b.sq = Math.max(0, b.sq - b.sq * SQUASH_DECAY * dt);
 
