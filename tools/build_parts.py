@@ -170,7 +170,7 @@ def fill_gaps(mask, dt, circles, budget, min_r, target=0.97):
     return circles
 
 
-def build(i, grid, min_fill, max_parts):
+def build(i, grid, min_fill, max_parts, pad=1.0):
     path = find_sprite(i)
     im = Image.open(path).convert("RGBA")
     alpha = np.asarray(im)[:, :, 3]
@@ -185,6 +185,11 @@ def build(i, grid, min_fill, max_parts):
     # 贪心铺圆：每次在“还没被覆盖、且离轮廓最远”的地方放一个内接圆
     circles = fill_gaps(mask, dt, circles, max(0, max_parts - len(circles)),
                         min_r=0.03 * SCALE)
+
+    # pad > 1：把每个圆「吹胖」（圆心不动、只放大半径），填掉内接圆彼此的缝隙。
+    # 纯内接圆会让碰撞箱比图案小一圈，两个水果靠在一起时贴图就会互相压进去。
+    if pad != 1.0:
+        circles = [(cx, cy, r * pad, t) for cx, cy, r, t in circles]
 
     cover = circles_mask(circles, mask.shape)
     inter = (cover & mask).sum()
@@ -217,14 +222,17 @@ def main():
     ap.add_argument("--grid", type=int, default=5)
     ap.add_argument("--min-fill", type=float, default=0.30)
     ap.add_argument("--max-parts", type=int, default=9)
+    ap.add_argument("--pad", type=float, default=1.0,
+                    help="碰撞圆外扩系数：1.0=内接（旧行为），>1 让碰撞箱贴合视觉轮廓")
     ap.add_argument("--preview", action="store_true", help="导出贴合度对照图 _parts_preview.png")
     args = ap.parse_args()
 
     data = []
-    print("网格 %dx%d  最小填充 %.2f  最多 %d 个圆\n" % (args.grid, args.grid, args.min_fill, args.max_parts))
+    print("网格 %dx%d  最小填充 %.2f  最多 %d 个圆  外扩 %.2f\n"
+          % (args.grid, args.grid, args.min_fill, args.max_parts, args.pad))
     print("%-4s %-11s %5s %7s %7s %7s   %s" % ("tier", "name", "circles", "IoU", "覆盖率", "超出率", "rb"))
     for i in range(1, 12):
-        r = build(i, args.grid, args.min_fill, args.max_parts)
+        r = build(i, args.grid, args.min_fill, args.max_parts, args.pad)
         data.append({"parts": r["parts"], "rb": r["rb"]})
         print("%-4d %-11s %5d %7.3f %6.1f%% %6.1f%%   %.3f"
               % (i - 1, TIERS[i - 1], r["count"], r["iou"], r["recall"] * 100,
