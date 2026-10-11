@@ -1,5 +1,5 @@
 /* ============================================================
- *  合成大奶娃 · Suika Game
+ *  合成马诗睿 · Suika Game
  *  纯原生 HTML + CSS + JavaScript，无任何依赖。
  *
  *  物理：PBD（位置约束求解）—— 3 个子步 × 6 次迭代，
@@ -27,11 +27,11 @@
   const REST_SPEED = 140;    // 线上方且速度低于它才算“卡住”（被弹飞路过的不算）
   const REST_SPEED2 = REST_SPEED * REST_SPEED;
 
-  const MAX_TIER  = 10;      // 最大那只（神奶蛙）的索引
-  const MAX_BONUS = 500;     // 两只神奶蛙相撞的奖励分
+  const MAX_TIER  = 10;      // 最大那只的索引
+  const MAX_BONUS = 500;     // 两只最大的相撞的奖励分
                              // （原来是 100 —— 合出全游戏最难的东西只给 100 分，太寒酸；
                              //  而且它同时清掉两块最大的水果、相当于救一条命，值这个价）
-  const MAX_MERGE_GIVES_REVIVE = true;  // 两只神奶蛙一起炸掉时，额外送一枚复活币
+  const MAX_MERGE_GIVES_REVIVE = true;  // 两只最大的一起炸掉时，额外送一枚复活币
   const FREEZE_MS = 130;     // 清场时的定格，让这一下有重量
   const REVIVE_STEP = 2000;  // 每累计多少分，发一枚复活币
   const MERGE_PAD = 0.8;     // 合成判定的接触容差（px）
@@ -527,7 +527,7 @@
       const tier = a.tier;
 
       if (tier >= MAX_TIER) {
-        /* 两只神奶蛙 → 一起炸掉，拿一大笔奖励分（外加一枚复活币）。
+        /* 两只最大的 → 一起炸掉，拿一大笔奖励分（外加一枚复活币）。
            注意：它同时清掉了两块最大的水果，是后期唯一的泄压阀，不能取消。
            分数的飘字不用 addScore 那个普通的，下面单独给了「大字 +500」。 */
         addScore(MAX_BONUS);
@@ -537,7 +537,7 @@
         haptic(70);
         state.flash = 1.4;                    // 比普通合成更亮的全屏闪
         state.freeze = FREEZE_MS / 1000;      // 定格一下，让这一下有重量
-        state.floats.push({ x: mx, y: my - 74, text: '两个神奶蛙 💥', life: 1.6 });
+        state.floats.push({ x: mx, y: my - 74, text: '两只最大的撞一起 💥', life: 1.6 });
         state.floats.push({ x: mx, y: my - 16, text: '+' + MAX_BONUS, life: 2.2, big: true });
         if (MAX_MERGE_GIVES_REVIVE) {
           state.revives++;
@@ -851,7 +851,7 @@
     c.fillStyle = g;
     c.fill();
 
-    /* 半奶蛙 / 神奶蛙 的纹理 */
+    /* 最后两级的纹理 */
     if (tier === MAX_TIER) {
       c.save();
       c.beginPath();
