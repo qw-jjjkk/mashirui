@@ -41,6 +41,9 @@
   const WALL_RESTITUTION = 0.45;  // 撞墙 / 撞地面的弹性
   const REST_THRESHOLD   = 55;    // 撞击速度低于此值不反弹（保证堆叠稳、不抖）
   const FRICTION         = 0.955; // 接触时的切向摩擦（每个子步）
+  const CONTACT_DAMP     = 0.82;  // 接触且有支撑时的速度衰减（真正让堆叠停下来的那个）
+  const SETTLE_SPEED     = 45;    // 低于这个速度直接归零，彻底断掉堆叠抖动
+  const SETTLE_SPEED2    = SETTLE_SPEED * SETTLE_SPEED;
   const SQUASH_DECAY     = 9;     // 挤压回弹速度
   const SQUASH_MAX       = 0.30;  // 最大挤压变形
 
@@ -51,27 +54,27 @@
   const ASSET_FILL = 0.92;   // 贴图里主体占画布长边的比例，与生成脚本保持一致
 
   const FRUITS = [
-    { name: '葡萄',   r: 17,  c1: '#c084f5', c2: '#7a3fb0', line: 'rgba(74,26,120,.35)',
+    { name: '葡萄',   r: 20,  c1: '#c084f5', c2: '#7a3fb0', line: 'rgba(74,26,120,.35)',
       file: 'assets/fruits/01-grape.webp',     pc1: '#e9c466', pc2: '#b8903a' },
-    { name: '樱桃',   r: 23,  c1: '#ff8a99', c2: '#c62346', line: 'rgba(120,10,40,.35)',
+    { name: '樱桃',   r: 26,  c1: '#ff8a99', c2: '#c62346', line: 'rgba(120,10,40,.35)',
       file: 'assets/fruits/02-cherry.webp',    pc1: '#ffe684', pc2: '#d8b44f' },
-    { name: '橘子',   r: 31,  c1: '#ffc06a', c2: '#e0741a', line: 'rgba(140,62,0,.32)',
+    { name: '橘子',   r: 36,  c1: '#ffc06a', c2: '#e0741a', line: 'rgba(140,62,0,.32)',
       file: 'assets/fruits/03-orange.webp',    pc1: '#fdd865', pc2: '#cfa63f' },
-    { name: '柠檬',   r: 39,  c1: '#fff285', c2: '#e0b000', line: 'rgba(140,110,0,.32)',
+    { name: '柠檬',   r: 45,  c1: '#fff285', c2: '#e0b000', line: 'rgba(140,110,0,.32)',
       file: 'assets/fruits/04-lemon.webp',     pc1: '#f6cd63', pc2: '#c9a040' },
-    { name: '猕猴桃', r: 48,  c1: '#b9e05a', c2: '#5d8c1c', line: 'rgba(60,90,10,.32)',
+    { name: '猕猴桃', r: 55,  c1: '#b9e05a', c2: '#5d8c1c', line: 'rgba(60,90,10,.32)',
       file: 'assets/fruits/05-kiwi.webp',      pc1: '#c4a559', pc2: '#94793c' },
-    { name: '番茄',   r: 58,  c1: '#ff8a66', c2: '#c62f28', line: 'rgba(120,20,10,.32)',
+    { name: '番茄',   r: 67,  c1: '#ff8a66', c2: '#c62f28', line: 'rgba(120,20,10,.32)',
       file: 'assets/fruits/06-tomato.webp',    pc1: '#fbd75a', pc2: '#cba63c' },
-    { name: '桃子',   r: 69,  c1: '#ffd0d0', c2: '#ea7f93', line: 'rgba(160,60,80,.3)',
+    { name: '桃子',   r: 79,  c1: '#ffd0d0', c2: '#ea7f93', line: 'rgba(160,60,80,.3)',
       file: 'assets/fruits/07-peach.webp',     pc1: '#f7c45a', pc2: '#c99a3e' },
-    { name: '菠萝',   r: 81,  c1: '#ffe07a', c2: '#c88a12', line: 'rgba(130,80,0,.32)',
+    { name: '菠萝',   r: 93,  c1: '#ffe07a', c2: '#c88a12', line: 'rgba(130,80,0,.32)',
       file: 'assets/fruits/08-pineapple.webp', pc1: '#ffd37b', pc2: '#d1a252' },
-    { name: '椰子',   r: 94,  c1: '#f0e2c6', c2: '#9b7b4f', line: 'rgba(90,64,32,.35)',
+    { name: '椰子',   r: 108, c1: '#f0e2c6', c2: '#9b7b4f', line: 'rgba(90,64,32,.35)',
       file: 'assets/fruits/09-coconut.webp',   pc1: '#ffd771', pc2: '#d3a94e' },
-    { name: '半奶蛙', r: 108, c1: '#ff9d78', c2: '#c23a2c', line: 'rgba(120,24,16,.32)',
+    { name: '半奶蛙', r: 124, c1: '#ff9d78', c2: '#c23a2c', line: 'rgba(120,24,16,.32)',
       file: 'assets/fruits/10-halfmelon.webp', pc1: '#ccab68', pc2: '#9c8047' },
-    { name: '神奶蛙', r: 124, c1: '#7ce878', c2: '#1c8a33', line: 'rgba(12,70,24,.4)',
+    { name: '神奶蛙', r: 143, c1: '#7ce878', c2: '#1c8a33', line: 'rgba(12,70,24,.4)',
       file: 'assets/fruits/11-watermelon.webp', pc1: '#eece9b', pc2: '#c0a271' }
   ];
 
@@ -453,6 +456,18 @@
       let vy = dy * invDt;
 
       if (b.contacts > 0) vx *= FRICTION;   // 接触时的切向摩擦
+
+      /* 静止阻尼：只在「有支撑」时生效，把堆叠的残余微动吃掉。
+         PBD 的位置分离会让叠起来的水果互相推挤，光靠位置约束永远停不下来 ——
+         堆顶一直在抖，判负规则要求的「静止累计 1.5 秒」就永远凑不够，于是输不了。
+         速度很小时直接归零（SETTLE_SPEED），彻底断掉抖动。 */
+      if (b.contacts > 0 && b.landed) {
+        vx *= CONTACT_DAMP;
+        vy *= CONTACT_DAMP;
+        const sp2 = vx * vx + vy * vy;
+        if (sp2 < SETTLE_SPEED2) { vx = 0; vy = 0; }
+      }
+
       if (b.sq > 0) b.sq = Math.max(0, b.sq - b.sq * SQUASH_DECAY * dt);
 
       b.vx = vx;
